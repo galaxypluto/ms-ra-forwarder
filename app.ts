@@ -5,8 +5,11 @@ const app = express()
 
 const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
 
+app.use(express.json()) // Support JSON payloads
 app.use(bodyParser.text({ type: '*/*' }))
 app.use(express.static('public'))
+
+app.post('/v1/audio/speech', require('./api/openai'))
 
 app.get('/api/legado', require('./api/legado'))
 app.post('/api/ra', require('./api/ra'))
