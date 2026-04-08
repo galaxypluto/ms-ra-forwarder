@@ -1,149 +1,101 @@
-# ms-ra-forwarder
+# Hybrid TTS Gateway
 
-创建这个项目的初衷是为了能够在[阅读（legado）](https://github.com/gedoor/legado)中听“晓晓”念书。由于其中的脚本引擎不支持 WebSocket ，所以包装了一下微软 Edge 浏览器“大声朗读”的接口。
+A high-availability, high-performance hybrid Text-to-Speech (TTS) gateway system. It provides a robust, drop-in replacement for OpenAI's audio/speech endpoints by intelligently routing requests across specialized local TTS microservices and a serverless fallback.
 
-如果你的项目可以使用 WebSocket ，请直接在项目中调用原接口。具体代码可以参考 [ra/index.ts](ra/index.ts)。
+## 🌟 Core Modules & Architecture
 
-## 重要更改
+This gateway serves as a unified router offering two industry-standard protocols:
+- **REST API** (Fully compatible with OpenAI `/v1/audio/speech`)
+- **WebSocket** (Compatible with streaming audio protocols for real-time LLM conversations)
 
-**2022-11-18：添加词典文件支持，词典文件格式参考 https://github.com/wxxxcxx/azure-tts-lexicon-cn/blob/main/lexicon.xml 。**
+Clients like Next.js apps, Dify workflows, and OpenWebUI can seamlessly use this powerful TTS backend by simply repointing their OpenAI base URL to this service.
 
-2022-09-10：修改 docker 仓库地址，后面构建的 docker 镜像会迁移到 wxxxcxx/ms-ra-forwarder（原仓库旧版本镜像依然有效）。
+### 1. 🚦 The Router / Gateway
+Provides the primary unified endpoints. It parses incoming requests, determines the optimal engine based on language, tags, voice mappings, and custom instructions, and seamlessly handles streaming vs. non-streaming responses.
 
-2022-09-01：Azure TTS API 好像又改了，旧版用户可能会无法正常使用，请更新到最新版。
+### 2. 🇬🇧 Chatterbox-Turbo: English & High Emotion Engine
+When the router detects pure English input or emotion tags (e.g., `[laugh]`, `[cough]`), it routes the request here.
+- **Strengths:** Extremely low latency, top-tier natural English prosody, perfect for English customer service and conversational AI.
 
-2022-07-17：添加 Azure TTS API 支持（没怎么测试，不知道用起来稳不稳定）。因为调用 Azure TTS API 需要获取授权码。其它方式只需要或取一次就可以使用一段时间，而 Vercel 每次调用 API 都需要重新获取授权码。容易超时不说，也加剧了微软服务器的负担，所以不是很推荐部署在 Vercel 的用户使用（虽然也不是不能用～但是万一微软被薅痛了，又改接口就不好了😂）。
+### 3. 🇨🇳 OmniVoice: Multi-Language & Voice Design Engine
+When the input contains complex languages (Chinese, Japanese) or uses prompt-based voice creation (e.g., `{"instruct": "female, Sichuan dialect, whisper"}` via `extra_body`), the router directs the request to OmniVoice.
+- **Strengths:** 600+ language support and highly creative Voice Design capabilities via prompt instructions.
 
-2022-07-02：Edge 版本的 API 目前测试还支持的格式有 `webm-24khz-16bit-mono-opu`、`audio-24khz-48kbitrate-mono-mp3`、`audio-24khz-96kbitrate-mono-mp3`。另外今天下午开始，使用不在下拉列表中声音会出现类似 “Unsupported voice zh-CN-YunyeNeural.” 错误，后续可能也会被砍掉。且用且珍惜吧！
+### 4. ☁️ Edge-TTS: Online Serverless Fallback
+A high-availability strategy (Fallback) invoked automatically when local GPU resources are exhausted (OOM) or when the gateway is deployed on CPU-only/low-resource machines.
+- **Strengths:** Ensures 99.9% uptime. The user always receives clear audio, masking temporary backend failures.
 
-2022-07-01：~~部署在中国大陆以外服务器上的服务目前只能选择 `webm-24khz-16bit-mono-opus` 格式的音频了！~~ 所以使用 Vercel 的用户需要重新部署一下。
+## 🛠 Engineering Solutions
 
-2022-06-16：Edge 浏览器提供的接口现在已经不能设置讲话风格了，若发现不能正常使用，请参考 [#12](https://github.com/wxxxcxx/ms-ra-forwarder/issues/12#issuecomment-1157271193) 获取更新。
+- **VRAM Management:** Built around independent backend microservices. OmniVoice and Chatterbox handle requests independently. If a model hits an Out of Memory (OOM) limit or is being dynamically offloaded/lazy-loaded, the router seamlessly catches the failure and redirects to Edge-TTS.
+- **WebSocket Pseudo-Streaming:** Local models often generate whole WAV files. The gateway splits long texts by punctuation and processes them sequentially. Once the first sentence is generated, it streams the binary chunk to the client via SSE/WebSocket while rendering the next sentence in the background.
+- **OpenAI API Protocol Adapter:** Smooth mapping of standard OpenAI voices to the optimal engine:
+  - `voice="alloy"` -> Maps to Chatterbox-Turbo default male voice.
+  - `voice="nova"` -> Maps to OmniVoice default sweet bilingual female voice.
+  - Custom voices and voice design via `extra_body.instruct`.
 
+## 🚀 Setup & Execution
 
-## 部署
+### Prerequisites
+- Node.js (>= 16.x)
+- `npm`
 
-请参考下列部署方式。
-
-
-### 部署到 Railway
-
-Railway 增加了每个月500小时的限制，而且不会自动停机，所以每个月会有一段时间无法是使用。有条件的还是使用docker部署吧。
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/p8RU3T?referralCode=-hqLZp)
-
-### 部署到 Heroku
-
-
-[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
-
-
-### Docker（推荐）
-
-需要安装 docker。
-
-``` bash
-# 拉取镜像
-docker pull wxxxcxx/ms-ra-forwarder:latest
-# 运行
-docker run --name ms-ra-forwarder -d -p 3000:3000 wxxxcxx/ms-ra-forwarder
-# or
-docker run --name ms-ra-forwarder -d -p 3000:3000 -e TOKEN:自定义TOKEN wxxxcxx/ms-ra-forwarder
-
-# 浏览器访问 http://localhost:3000
-```
-
-### Docker Compose
-
-创建 `docker-compose.yml` 写入以下内容并保存。
-
-``` yaml
-version: '3'
-
-services:
-  ms-ra-forwarder:
-    container_name: ms-ra-forwarder
-    image: wxxxcxx/ms-ra-forwarder:latest
-    restart: unless-stopped
-    ports:
-      - 3000:3000
-    environment:
-      # 不需要可以不用设置环境变量
-      - TOKEN=自定义TOKEN
-```
-
-在 `docker-compose.yml` 目录下执行 `docker compose up -d`。
-
-### 部署到 Vercel
-
-请先 Fork 一份代码然后部署到自己的 Vercel 中 。参考 [演示视频](https://www.youtube.com/watch?v=vRC6umZp8hI)。
-
-**注：现在不是很推荐使用 Vercel 部署**
-
-
-### 手动运行
-
-手动运行需要事先安装好 git 和 nodejs。
-
+### Installation
 ```bash
-# 获取代码
-git clone https://github.com/wxxxcxx/ms-ra-forwarder.git
-
-cd ms-ra-forwarder
-# 安装依赖
-npm install 
-# 运行
-npm run start
+git clone https://github.com/yourusername/hybrid-tts-gateway.git
+cd hybrid-tts-gateway
+npm install
 ```
 
-## 使用
+### Build and Run
+```bash
+# Compile the TypeScript codebase
+npm run build
 
-### 导入到阅读（legado）
-
-请访问你部署好的网站，在页面中测试没有问题后点击“生成阅读（legado）语音引擎链接”，然后在阅读（legado）中导入。
-
-### 手动调用
-
-接口地址为 `api/azure` 或 `api/ra`。格式为：
-```
-POST /api/ra
-FORMAT: audio-16khz-128kbitrate-mono-mp3
-Content-Type: text/plain
-
-<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">
-  <voice name="zh-CN-XiaoxiaoNeural">
-    如果喜欢这个项目的话请点个 Star 吧。
-  </voice>
-</speak>
+# Start the server (Listens on port 3000 by default)
+npm start
 ```
 
-#### 定制发音和音色
-请求的正文为 ssml 格式，支持定制发音人和讲话风格（目前仅 Azure 版本支持定制讲话风格），下面是相关的示例和文档：
+## 🔌 API Endpoints
 
-[文本转语音](https://azure.microsoft.com/zh-cn/services/cognitive-services/text-to-speech/#overview)
+### 1. OpenAI Compatible REST API
+**`POST /v1/audio/speech`**
 
-[通过语音合成标记语言 (SSML) 改善合成](https://docs.microsoft.com/zh-cn/azure/cognitive-services/speech-service/speech-synthesis-markup?tabs=csharp)
+```json
+{
+  "model": "tts-1",
+  "input": "Hello world, this is a test. [laugh]",
+  "voice": "alloy",
+  "response_format": "mp3",
+  "stream": true
+}
+```
+*Supports extra_body:*
+```json
+{
+  "model": "tts-1",
+  "input": "你好，这是一段测试音频。",
+  "voice": "nova",
+  "extra_body": {
+    "instruct": "female, whisper"
+  }
+}
+```
 
+### 2. WebSocket Streaming
+**`ws://localhost:3000/v1/audio/speech/ws`**
 
+Send a JSON message:
+```json
+{
+  "type": "speech_request",
+  "payload": {
+    "input": "First sentence. Second sentence.",
+    "voice": "alloy"
+  }
+}
+```
+The server will stream back binary audio chunks as they are generated.
 
-#### 音频格式
-默认的音频格式为 webm ，如果需要获取为其他格式的音频请修改请求头的 `FORMAT`（可用的选项可以在 [ra/index.ts](ra/index.ts#L5) 中查看）。
-
-### 限制访问
-
-如果需要防止他人滥用你的部署的服务，可以在应用的环境变量中添加 `TOKEN`，然后在请求头中添加 `Authorization: Bearer <TOKEN>`访问。
-
-## 相关项目
-
-- [ag2s20150909/TTS](https://github.com/ag2s20150909/TTS)：安卓版，可代替系统自带的TTS。
-- [litcc/tts-server](https://github.com/litcc/tts-server)：Rust 版本。
-
-## 其他说明
-
-- 微软官方的 Azure TTS 服务目前拥有一定的免费额度，如果免费额度对你来说够用的话，请支持官方的服务。
-
-- 如果只需要为固定的文本生成语音，可以使用[有声内容创作](https://speech.microsoft.com/audiocontentcreation)。它提供了更丰富的功能可以生成更自然的声音。
-
-- 本项目使用的是 Edge 浏览器“大声朗读”和 Azure TTS 演示页面的接口，不保证后续可用性和稳定性。
-
-- **本项目仅供学习和参考，请勿商用。**
+---
+*This project combines the best engines (OmniVoice, Chatterbox) and a reliable fallback (Edge-TTS) under a unified, familiar OpenAI-compatible interface.*

@@ -1,7 +1,7 @@
 {
-  "name": "ms-ra-forwarder",
+  "name": "hybrid-tts-gateway",
   "version": "1.0.0",
-  "description": "",
+  "description": "A high-availability, high-performance hybrid TTS gateway system with REST API and WebSocket support, integrating Chatterbox-Turbo, OmniVoice, and Edge-TTS.",
   "main": "",
   "scripts": {
     "start": "ts-node ./app.ts",

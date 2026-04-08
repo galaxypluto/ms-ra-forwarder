@@ -36,13 +36,18 @@ class GatewayRouter {
         }
 
         // Default mapping based on voice
-        const omniVoices = ['nova', 'shimmer'];
-        if (omniVoices.includes(request.voice)) {
-            console.log(`[Router] Routing to OmniVoice based on voice mapping: ${request.voice}`);
+        if (request.voice === 'nova') {
+            console.log(`[Router] Routing to OmniVoice based on voice mapping: nova`);
             return this.omnivoice;
         }
 
-        console.log('[Router] Routing to Chatterbox-Turbo as default pure English handler.');
+        if (request.voice === 'alloy') {
+            console.log(`[Router] Routing to Chatterbox-Turbo based on voice mapping: alloy`);
+            return this.chatterbox;
+        }
+
+        // Default to Chatterbox if not specifically handled
+        console.log(`[Router] Routing to Chatterbox-Turbo as default pure English handler for voice: ${request.voice}`);
         return this.chatterbox;
     }
 
