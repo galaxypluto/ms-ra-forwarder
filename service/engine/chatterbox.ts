@@ -1,37 +1,58 @@
-import { TTSEngine, SpeechRequest, OOMError } from './types';
+import { TTSEngine, SpeechRequest, OOMError, EngineUnavailableError } from './types';
+import axios from 'axios';
 
 export class ChatterboxEngine implements TTSEngine {
     name = 'Chatterbox-Turbo';
+    private baseUrl = process.env.CHATTERBOX_URL || 'http://localhost:8001/v1/audio/speech';
 
-    private simulateProcessing(text: string): Promise<Buffer> {
-        return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                // Simulate an OOM error randomly (10% chance) to demonstrate fallback
-                if (Math.random() < 0.1) {
-                    reject(new OOMError('VRAM completely exhausted while loading Chatterbox-Turbo'));
-                    return;
-                }
-
-                // Return a dummy wav buffer (just the text repeated to simulate audio bytes)
-                const mockAudioData = `WAV_HEADER_MOCK_CHATTERBOX [${text}]`;
-                resolve(Buffer.from(mockAudioData));
-            }, 500); // 500ms simulation
-        });
+    private handleError(error: any) {
+        if (error.response) {
+            const status = error.response.status;
+            if (status === 503) {
+                throw new EngineUnavailableError('Chatterbox-Turbo service is unavailable');
+            } else if (status === 507 || status === 429) { // 507 Insufficient Storage / 429 Too Many Requests (often used for OOM/capacity)
+                throw new OOMError('Chatterbox-Turbo VRAM completely exhausted');
+            }
+        } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            throw new EngineUnavailableError('Chatterbox-Turbo service is offline');
+        }
+        throw error;
     }
 
     async generate(request: SpeechRequest): Promise<Buffer> {
         console.log(`[ChatterboxEngine] Generating full audio for text: ${request.input.substring(0, 20)}...`);
-        return this.simulateProcessing(request.input);
+        try {
+            const response = await axios.post(this.baseUrl, request, {
+                responseType: 'arraybuffer'
+            });
+            return Buffer.from(response.data);
+        } catch (error) {
+            this.handleError(error);
+            throw error;
+        }
     }
 
     async generateStream(request: SpeechRequest, onData: (chunk: Buffer) => void): Promise<void> {
         console.log(`[ChatterboxEngine] Generating streaming audio for text: ${request.input.substring(0, 20)}...`);
-        const buffer = await this.simulateProcessing(request.input);
-        // Simulate chunked response
-        const chunkSize = Math.ceil(buffer.length / 3);
-        for (let i = 0; i < buffer.length; i += chunkSize) {
-            onData(buffer.slice(i, i + chunkSize));
-            await new Promise(r => setTimeout(r, 100)); // simulate slight streaming delay
+        try {
+            const response = await axios.post(this.baseUrl, { ...request, stream: true }, {
+                responseType: 'stream'
+            });
+
+            return new Promise((resolve, reject) => {
+                response.data.on('data', (chunk: Buffer) => {
+                    onData(chunk);
+                });
+                response.data.on('end', () => {
+                    resolve();
+                });
+                response.data.on('error', (err: any) => {
+                    reject(err);
+                });
+            });
+        } catch (error) {
+            this.handleError(error);
+            throw error;
         }
     }
 }

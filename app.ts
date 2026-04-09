@@ -16,12 +16,6 @@ app.use(bodyParser.text({ type: '*/*' }))
 
 app.use(express.static('public'))
 
-// Backward compatible endpoints
-app.get('/api/legado', require('./api/legado'))
-app.post('/api/ra', require('./api/ra'))
-app.get('/api/azure', require('./api/azure'))
-app.post('/api/azure', require('./api/azure'))
-
 // New OpenAI Compatible Endpoint
 app.post('/v1/audio/speech', handleSpeechRequest)
 
