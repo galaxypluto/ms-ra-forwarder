@@ -11,16 +11,6 @@ const port = process.env.PORT ? parseInt(process.env.PORT) : 3000
 
 // Parse application/json for the new v1 API
 app.use(bodyParser.json())
-// Text parser for backward compatibility with ra/legado
-app.use(bodyParser.text({ type: '*/*' }))
-
-app.use(express.static('public'))
-
-// Backward compatible endpoints
-app.get('/api/legado', require('./api/legado'))
-app.post('/api/ra', require('./api/ra'))
-app.get('/api/azure', require('./api/azure'))
-app.post('/api/azure', require('./api/azure'))
 
 // New OpenAI Compatible Endpoint
 app.post('/v1/audio/speech', handleSpeechRequest)
