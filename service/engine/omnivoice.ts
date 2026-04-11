@@ -1,7 +1,17 @@
-import { TTSEngine, SpeechRequest, EngineUnavailableError } from './types';
+import { TTSEngine, SpeechRequest, EngineUnavailableError, OOMError } from './types';
+import { vramManager } from './vram';
 
 export class OmniVoiceEngine implements TTSEngine {
     name = 'OmniVoice';
+    private requiredVRAM = 6; // GB
+
+    private async ensureLoaded(): Promise<void> {
+        try {
+            await vramManager.load(this.name, this.requiredVRAM);
+        } catch (e) {
+            throw new OOMError('Failed to load OmniVoice into VRAM');
+        }
+    }
 
     private simulateProcessing(text: string, instruct?: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
@@ -20,11 +30,13 @@ export class OmniVoiceEngine implements TTSEngine {
     }
 
     async generate(request: SpeechRequest): Promise<Buffer> {
+        await this.ensureLoaded();
         console.log(`[OmniVoiceEngine] Generating full audio for text: ${request.input.substring(0, 20)}...`);
         return this.simulateProcessing(request.input, request.extra_body?.instruct);
     }
 
     async generateStream(request: SpeechRequest, onData: (chunk: Buffer) => void): Promise<void> {
+        await this.ensureLoaded();
         console.log(`[OmniVoiceEngine] Generating streaming audio for text: ${request.input.substring(0, 20)}...`);
         const buffer = await this.simulateProcessing(request.input, request.extra_body?.instruct);
         // Simulate chunked response
