@@ -1,17 +1,24 @@
 import { TTSEngine, SpeechRequest, OOMError } from './types';
+import { vramManager } from '../vram';
 
 export class ChatterboxEngine implements TTSEngine {
     name = 'Chatterbox-Turbo';
+    private readonly REQUIRED_VRAM = 4;
 
     private simulateProcessing(text: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
-            setTimeout(() => {
-                // Simulate an OOM error randomly (10% chance) to demonstrate fallback
-                if (Math.random() < 0.1) {
-                    reject(new OOMError('VRAM completely exhausted while loading Chatterbox-Turbo'));
+            try {
+                vramManager.requestVRAM(this.name, this.REQUIRED_VRAM);
+            } catch (error) {
+                if (error instanceof OOMError) {
+                    reject(error);
                     return;
                 }
+                reject(error);
+                return;
+            }
 
+            setTimeout(() => {
                 // Return a dummy wav buffer (just the text repeated to simulate audio bytes)
                 const mockAudioData = `WAV_HEADER_MOCK_CHATTERBOX [${text}]`;
                 resolve(Buffer.from(mockAudioData));

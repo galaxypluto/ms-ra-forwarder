@@ -1,10 +1,23 @@
-import { TTSEngine, SpeechRequest, EngineUnavailableError } from './types';
+import { TTSEngine, SpeechRequest, EngineUnavailableError, OOMError } from './types';
+import { vramManager } from '../vram';
 
 export class OmniVoiceEngine implements TTSEngine {
     name = 'OmniVoice';
+    private readonly REQUIRED_VRAM = 6;
 
     private simulateProcessing(text: string, instruct?: string): Promise<Buffer> {
         return new Promise((resolve, reject) => {
+            try {
+                vramManager.requestVRAM(this.name, this.REQUIRED_VRAM);
+            } catch (error) {
+                if (error instanceof OOMError) {
+                    reject(error);
+                    return;
+                }
+                reject(error);
+                return;
+            }
+
             setTimeout(() => {
                 // Simulate an EngineUnavailableError randomly (10% chance) to demonstrate fallback
                 if (Math.random() < 0.1) {
