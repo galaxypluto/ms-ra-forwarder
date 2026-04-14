@@ -89,22 +89,26 @@ export class Service {
           if (data.includes('Path:turn.start')) {
             // 开始传输
             let matches = data.match(pattern)
-            let requestId = matches.groups.id
-            console.debug(`开始传输：${requestId}……`)
-            this.bufferMap.set(requestId, Buffer.from([]))
+            if (matches && matches.groups) {
+              let requestId = matches.groups.id
+              console.debug(`开始传输：${requestId}……`)
+              this.bufferMap.set(requestId, Buffer.from([]))
+            }
           } else if (data.includes('Path:turn.end')) {
             // 结束传输
             let matches = data.match(pattern)
-            let requestId = matches.groups.id
+            if (matches && matches.groups) {
+              let requestId = matches.groups.id
 
-            let executor = this.executorMap.get(requestId)
-            if (executor) {
-              this.executorMap.delete(matches.groups.id)
-              let result = this.bufferMap.get(requestId)
-              executor.resolve(result)
-              console.debug(`传输完成：${requestId}……`)
-            } else {
-              console.debug(`请求已被丢弃：${requestId}`)
+              let executor = this.executorMap.get(requestId)
+              if (executor) {
+                this.executorMap.delete(requestId)
+                let result = this.bufferMap.get(requestId)
+                executor.resolve(result)
+                console.debug(`传输完成：${requestId}……`)
+              } else {
+                console.debug(`请求已被丢弃：${requestId}`)
+              }
             }
           }
         } else if (isBinary) {
@@ -114,20 +118,22 @@ export class Service {
 
           let headers = data.slice(2, contentIndex).toString()
           let matches = headers.match(pattern)
-          let requestId = matches.groups.id
+          if (matches && matches.groups) {
+            let requestId = matches.groups.id
 
-          let content = data.slice(contentIndex)
+            let content = data.slice(contentIndex)
 
-          console.debug(
-            `收到音频片段：${requestId} Length: ${content.length}\n${headers}`,
-          )
+            console.debug(
+              `收到音频片段：${requestId} Length: ${content.length}\n${headers}`,
+            )
 
-          let buffer = this.bufferMap.get(requestId)
-          if (buffer) {
-            buffer = Buffer.concat([buffer, content])
-            this.bufferMap.set(requestId, buffer)
-          } else {
-            console.debug(`请求已被丢弃：${requestId}`)
+            let buffer = this.bufferMap.get(requestId)
+            if (buffer) {
+              buffer = Buffer.concat([buffer, content])
+              this.bufferMap.set(requestId, buffer)
+            } else {
+              console.debug(`请求已被丢弃：${requestId}`)
+            }
           }
         }
       })
