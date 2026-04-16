@@ -1,6 +1,6 @@
 {
     "name": "hybrid-tts-gateway",
-    "description": "Microsoft Read Aloud Forwarder",
+    "description": "Hybrid TTS Gateway",
     "repository": "https://github.com/meetcw/hybrid-tts-gateway",
     "env": {
         "TOKEN": {

@@ -36,6 +36,7 @@ export const FORMAT_CONTENT_TYPE = new Map([
 interface PromiseExecutor {
   resolve: (value?: any) => void
   reject: (reason?: any) => void
+  onData?: (chunk: Buffer) => void
 }
 
 export class Service {
@@ -126,6 +127,11 @@ export class Service {
           if (buffer) {
             buffer = Buffer.concat([buffer, content])
             this.bufferMap.set(requestId, buffer)
+
+            let executor = this.executorMap.get(requestId)
+            if (executor && executor.onData) {
+              executor.onData(content)
+            }
           } else {
             console.debug(`请求已被丢弃：${requestId}`)
           }
@@ -144,7 +150,7 @@ export class Service {
     })
   }
 
-  public async convert(ssml: string, format: string) {
+  public async convert(ssml: string, format: string, onData?: (chunk: Buffer) => void) {
     if (this.ws == null || this.ws.readyState != WebSocket.OPEN) {
       console.info('准备连接服务器……')
       let connection = await this.connect()
@@ -157,6 +163,7 @@ export class Service {
       this.executorMap.set(requestId, {
         resolve,
         reject,
+        onData
       })
       // 发送配置消息
       let configData = {
