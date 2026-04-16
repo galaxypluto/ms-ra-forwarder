@@ -54,13 +54,15 @@ export class EdgeTTSEngine implements TTSEngine {
 
     async generateStream(request: SpeechRequest, onData: (chunk: Buffer) => void): Promise<void> {
         console.log(`[EdgeTTSEngine] Generating streaming audio for text: ${request.input.substring(0, 20)}...`);
-        // EdgeService in the current implementation returns the whole buffer at once when turn.end is received.
-        // We can simulate streaming it back.
-        const buffer = await this.generate(request);
-        const chunkSize = Math.ceil(buffer.length / 5);
-        for (let i = 0; i < buffer.length; i += chunkSize) {
-            onData(buffer.slice(i, i + chunkSize));
-            await new Promise(r => setTimeout(r, 50));
+        const voiceName = this.mapVoice(request.voice);
+        const format = this.getFormat(request.response_format);
+        const ssml = this.createSSML(request.input, voiceName);
+
+        try {
+            await EdgeService.convert(ssml, format, onData);
+        } catch (error) {
+            console.error('[EdgeTTSEngine] Stream fallback failed:', error);
+            throw error;
         }
     }
 }
